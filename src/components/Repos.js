@@ -1,5 +1,6 @@
 import {NavLink} from "react-router-dom";
 import {useEffect, useState} from "react";
+import axios from "axios";
 
 const REPOS_QUERY = `
 {
@@ -31,20 +32,19 @@ const REPOS_QUERY = `
 const Repos = () => {
 
     const [repos,setRepos] = useState([])
+    const fetchRepos = async () =>{
+        const response = await axios.post('https://api.github.com/graphql',{
+            query: REPOS_QUERY
+        },{headers:{Authorization:`Bearer ${process.env.REACT_APP_TOKEN}`}})
+        const {data} = await response
+        setRepos(data?.data?.search?.edges)
+    }
 
     useEffect(()=>{
-        fetch('https://api.github.com/graphql',{
-            method:'POST',
-            headers:{Authorization:`Bearer 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`},
-            body: JSON.stringify({query:REPOS_QUERY})
-        }).then(response => response.json())
-            .then(data => {
-                //console.log(data)
-                setRepos(data.data.search.edges)
-            })
+        fetchRepos().then(r => {}).catch(err => console.log(err))
     },[])
 
-    if (!repos.length) return 'Loading...'
+    if (!repos?.length) return 'Loading...'
 
     return(
         <main className='container'>

@@ -1,6 +1,7 @@
 import {useParams} from "react-router";
 import {useEffect, useState} from "react";
-import { Tabs, Tab, Row, Col, Nav } from 'react-bootstrap';
+import {Tabs, Tab, Row, Col, Nav, Accordion} from 'react-bootstrap';
+import axios from "axios";
 
 const Repo = () => {
     const id = useParams()
@@ -62,58 +63,48 @@ query repository($id: ID!){
     const [repoName,setRepoName] = useState('')
     const [owner,setOwner] = useState('')
 
-    useEffect(()=>{
-        fetch('https://api.github.com/graphql',{
-            method:'POST',
-            headers:{Authorization:`Bearer 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`},
-            body: JSON.stringify({
-                query:REPO_QUERY,
-                variables: id
-            })
-        }).then(response => response.json())
-            .then(data => {
-                setRepo(data.data.node)
-                setRepoName(data.data.node.name)
-                setOwner(data.data.node.owner.login)
-            })
-            .then(()=>{
+    const fetchRepo = async () => {
+        const response = await axios.post('https://api.github.com/graphql',{
+            query: REPO_QUERY,
+            variables: id
+        },{headers:{Authorization:`Bearer ${process.env.REACT_APP_TOKEN}`}})
+        const {data} = await response
+        setRepo(data.data.node)
+        setRepoName(data.data.node.name)
+        setOwner(data.data.node.owner.login)
+    }
 
-                // fetch repo files by repo name
-                fetch('https://api.github.com/graphql',{
-                    method:'POST',
-                    headers:{Authorization:`Bearer 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`},
-                    body: JSON.stringify({
-                        query:REPO_FILES_QUERY,
-                        variables: {repoName,id,owner}
-                    })
-                }).then(response => response.json())
-                    .then(data => {
-                        setBranches(data?.data?.repository?.refs?.edges)
-                        console.log(data?.data?.repository?.refs?.edges)
-                        for (let i = 0;i<data?.data?.repository?.refs?.edges.length;i++){
-                            fetch('https://api.github.com/graphql',{
-                                method:'POST',
-                                headers:{Authorization:`Bearer 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`},
-                                body: JSON.stringify({
-                                    query:BRANCH_QUERY,
-                                    variables: {repoName,id,owner,branchName:data?.data?.repository?.refs?.edges[i].node.name +':'}
-                                })
-                            }).then(response => response.json())
-                                .then(data => {
-                                    console.log('files',data)
-                                    console.log(files)
-                                    setFiles([...files,files.push(data.data.repository.object.entries)])
-                                    //console.log(data?.data?.repository?.object?.entries)
-                                })
-                        }
-                    })
-            })
+    const fetchBranches = async () => {
+        const response = await axios.post('https://api.github.com/graphql',{
+            query: REPO_FILES_QUERY,
+            variables: {repoName,id,owner}
+        },{headers:{Authorization:`Bearer ${process.env.REACT_APP_TOKEN}`}})
+        const {data} = await response
+        setBranches(data?.data?.repository?.refs?.edges)
+        //console.log('branches', data?.data?.repository?.refs?.edges)
+    }
+
+    const fetchFiles = async (branchName) => {
+        const response = await axios.post('https://api.github.com/graphql',{
+            query: BRANCH_QUERY,
+            variables: {repoName, id, owner, branchName:branchName + ':' }
+        },{headers:{Authorization:`Bearer ${process.env.REACT_APP_TOKEN}`}})
+        const {data} = await response
+        setFiles(data.data.repository.object.entries)
+        console.log('files', data.data.repository.object.entries)
+    }
+
+    useEffect(()=>{
+        fetchRepo().then(r => {}).catch(err => console.log(err))
+        fetchBranches().then(r => {}).catch(err => console.log(err))
+
     },[repoName,owner])
 
-    //if (!repo) return 'Loading...'
-    //if (!branches.length) return 'Loading...'
-    if (!files.length) return 'Loading...'
+    const handleClick = (branchName) => {
+        fetchFiles(branchName).then(r => {}).catch(err => console.log(err))
+    }
 
+    if (!branches?.length) return 'Loading...'
 
     return(
         <div className='container'>
@@ -125,7 +116,7 @@ query repository($id: ID!){
                         <Nav variant="pills" className="flex-column">
                             {branches && branches.map((branch,id) => (
                                 <Nav.Item key={id} >
-                                    <Nav.Link eventKey={`${id}branch`} name={branch.node.name}>{branch.node.name}</Nav.Link>
+                                    <Nav.Link eventKey={`${id}branch`} name={branch.node.name} onClick={()=>{handleClick(branch.node.name)}}>{branch.node.name}</Nav.Link>
                                 </Nav.Item>
                             ))}
                         </Nav>
@@ -135,7 +126,16 @@ query repository($id: ID!){
                             {branches && branches.map((branch,id) => (
                                 <Tab.Pane eventKey={`${id}branch`} key={id}>
                                     <p>{branch.node.name}</p>
-                                    {/*{files.filter(file => (<div>{file.name}</div>))}*/}
+                                        <Accordion defaultActiveKey="0file">
+                                            {files.map((file,fileId) => (
+                                            <Accordion.Item eventKey={`${fileId}file`}>
+                                                <Accordion.Header>{file.name}</Accordion.Header>
+                                                <Accordion.Body>
+                                                    {file.object.text}
+                                                </Accordion.Body>
+                                            </Accordion.Item>
+                                            ))}
+                                        </Accordion>
                                 </Tab.Pane>
                             ))}
                         </Tab.Content>
